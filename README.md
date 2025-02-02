@@ -7,9 +7,9 @@ Analytics tools such as Google Analytics give you detailed location data down to
 # Getting Started
 1. #### Setting up Google Secrets
     This application is designed to have the MAXMIND credentials stored in Google Secret Manager.  Set up a secret called "geolocation-webhook" and enter the following:
-    API_KEY={This is your API key to access the webhook}
-    MAXMIND_ACCOUNT_ID={Your Maxmind account id}
-    MAXMIND_LICENSE_KEY={Your Maxmind license key}
+    - API_KEY={This is your API key to access the webhook}
+    - MAXMIND_ACCOUNT_ID={Your Maxmind account id}
+    - MAXMIND_LICENSE_KEY={Your Maxmind license key}
 
 2. #### Setting up Google Cloud Storage (GCS) Bucket
     This application uses GCS to save the memory of the webhook server.  Create a GCS bucket called "geolocation-webhook"
