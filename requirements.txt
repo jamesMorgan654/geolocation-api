@@ -1,0 +1,10 @@
+Flask
+requests
+google-cloud-storage
+google-cloud-secret-manager
+google-cloud-bigquery
+db-dtypes
+pandas
+google-auth
+google-cloud-logging
+gunicorn

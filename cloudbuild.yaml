@@ -1,0 +1,51 @@
+steps:
+  # 1️. Build the Docker image with environment variables
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "--build-arg"
+      - "MAXMIND_URL=$_MAXMIND_URL"
+      - "--build-arg"
+      - "BUCKET_NAME=$_BUCKET_NAME"
+      - "--build-arg"
+      - "BLOB_NAME=$_BLOB_NAME"
+      - "--build-arg"
+      - "BQ_IPV4_TABLE=$_BQ_IPV4_TABLE"
+      - "--build-arg"
+      - "BQ_IPV6_TABLE=$_BQ_IPV6_TABLE"
+      - "--build-arg"
+      - "BQ_DATASET=$_BQ_DATASET"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/geolocation-api"
+      - "."
+
+  # 2️. Push the image to Google Container Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/geolocation-api"]
+
+  # 3️. Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "geolocation-api"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/geolocation-api"
+      - "--platform"
+      - "managed"
+      - "--region"
+      - "$_REGION"
+      - "--allow-unauthenticated"
+
+substitutions:
+  _MAXMIND_URL: "https://download.maxmind.com/geoip/databases/GeoLite2-City-CSV/download?suffix=zip"
+  _BUCKET_NAME: "geolocation-webhook"
+  _BLOB_NAME: "geodata"
+  _BQ_DATASET: "geodata"
+  _BQ_IPV4_TABLE: "ipv4"
+  _BQ_IPV6_TABLE: "ipv6"
+  _REGION: "us-central1"
+
+images:
+  - "gcr.io/$PROJECT_ID/geolocation-api"
