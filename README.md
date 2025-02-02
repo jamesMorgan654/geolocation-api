@@ -6,21 +6,21 @@ Analytics tools such as Google Analytics give you detailed location data down to
 
 # Getting Started
 1. #### Setting up Google Secrets
-This application is designed to have the MAXMIND credentials stored in Google Secret Manager.  Set up a secret called "geolocation-webhook" and enter the following:
-API_KEY={This is your API key to access the webhook}
-MAXMIND_ACCOUNT_ID={Your Maxmind account id}
-MAXMIND_LICENSE_KEY={Your Maxmind license key}
+    This application is designed to have the MAXMIND credentials stored in Google Secret Manager.  Set up a secret called "geolocation-webhook" and enter the following:
+    API_KEY={This is your API key to access the webhook}
+    MAXMIND_ACCOUNT_ID={Your Maxmind account id}
+    MAXMIND_LICENSE_KEY={Your Maxmind license key}
 
 2. #### Setting up Google Cloud Storage (GCS) Bucket
-This application uses GCS to save the memory of the webhook server.  Create a GCS bucket called "geolocation-webhook"
-Optional: Set data expiration to automatically delete data older than 7 days.
+    This application uses GCS to save the memory of the webhook server.  Create a GCS bucket called "geolocation-webhook"
+    Optional: Set data expiration to automatically delete data older than 7 days.
 
 3. #### Setting Up BigQuery
-Create a BigQuery DataSet called geodata for the application to push to. The data is quite large so this speeds up the process of extracting it.  It also means you don't need much memory in your webhook server.
+    Create a BigQuery DataSet called geodata for the application to push to. The data is quite large so this speeds up the process of extracting it.  It also means you don't need much memory in your webhook server.
 
 4. #### Upload postcodes.csv To BigQuery
-In the repo there is a file called postcodes.csv.  Upload this to the bigquery dataset as a table called "postcodes".  
-**Note that this only contains NZ postcodes.  You will need to update this if you are wanting this to work in another country.** 
+    In the repo there is a file called postcodes.csv.  Upload this to the bigquery dataset as a table called "postcodes".  
+    **Note that this only contains NZ postcodes.  You will need to update this if you are wanting this to work in another country.** 
 
 4. #### Deploy the application
 [![Deploy to Google Cloud Run](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/jamesMorgan654/geolocation_api)
