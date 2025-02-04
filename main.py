@@ -34,6 +34,7 @@ BLOB_NAME = os.environ.get("BLOB_NAME")
 BQ_DATASET = os.environ.get("BQ_DATASET")
 BQ_IPV4_TABLE = os.environ.get("BQ_IPV4_TABLE")
 BQ_IPV6_TABLE = os.environ.get("BQ_IPV6_TABLE")
+CLOUD_RUN_PROCESS_DATA_URL = os.environ.get("CLOUD_RUN_PROCESS_DATA_URL")
 
 storage_client = storage.Client()
 
@@ -49,6 +50,18 @@ def require_auth(func):
             return func(*args, **kwargs)
     wrapper.__name__ = func.__name__  
     return wrapper
+
+def wait_until_exists(blob, max_wait=30, interval=5):
+    """Wait until the blob exists in GCS or timeout after max_wait seconds."""
+    elapsed_time = 0
+    while elapsed_time < max_wait:
+        time.sleep(interval)
+        blob.reload()
+        if blob.exists():
+            return True
+        elapsed_time += interval
+
+    raise Exception("Timeout waiting for file to appear in GCS.")
 
 def fetch_zip():
     """Get the ZIP file and save to cloud storage bucket"""
@@ -70,7 +83,7 @@ def fetch_zip():
                 buffer.write(chunk)
             buffer.seek(0)
             blob.upload_from_file(buffer, content_type="application/zip")
-
+        wait_until_exists(blob)
         return True
 
     except Exception as e:
@@ -142,7 +155,7 @@ def wait_for_gcs_file(file):
     blob_path = f"{BLOB_NAME}_unzipped/{get_latest_folder()}{file['filename']}"
     blob = bucket.blob(blob_path)
 
-    timeout = 30  # Max wait time in seconds
+    timeout = 60  # Max wait time in seconds
     start_time = time.time()
 
     while time.time() - start_time < timeout:
@@ -154,17 +167,54 @@ def wait_for_gcs_file(file):
     return False
 
 def get_csv_headers_from_gcs(file):
-    """Reads CSV headers from GCS to generate a schema with all STRING fields."""
-    bucket = storage_client.bucket(BUCKET_NAME)
-    blob = bucket.blob(f"{BLOB_NAME}_unzipped/{get_latest_folder()}{file['filename']}")
+    # """Reads CSV headers from GCS to generate a schema with all STRING fields."""
+    # bucket = storage_client.bucket(BUCKET_NAME)
+    # blob = bucket.blob(f"{BLOB_NAME}_unzipped/{get_latest_folder()}{file['filename']}")
 
-    # Download only the first row of the CSV
-    csv_data = blob.download_as_text(encoding="utf-8")
-    first_line = csv_data.split("\n", 1)[0]  # Get only the first line
+    # # Download only the first row of the CSV
+    # csv_data = blob.download_as_text(encoding="utf-8")
+    # first_line = csv_data.split("\n", 1)[0]  # Get only the first line
 
-    # Parse CSV headers
-    reader = csv.reader(io.StringIO(first_line))
-    headers = next(reader)
+    # # Parse CSV headers
+    # reader = csv.reader(io.StringIO(first_line))
+    # headers = next(reader)
+    """
+    Hardcoding the schemas for now.  I was having memory issues with loading the header from the
+    bucket. TBH I don't think these are subject to change much and I will keep up to date on my end.
+    """
+    if file['filename'] == "GeoLite2-City-Locations-en.csv":
+        headers = [
+            'geoname_id',
+            'locale_code',
+            'continent_code',
+            'continent_name',
+            'country_iso_code',
+            'country_name',
+            'subdivision_1_iso_code',
+            'subdivision_1_name',
+            'subdivision_2_iso_code',
+            'subdivision_2_name',
+            'city_name',
+            'metro_code',
+            'time_zone',
+            'is_in_european_union'
+        ]
+    elif file['filename'] == "GeoLite2-City-Blocks-IPv4.csv" or "GeoLite2-City-Blocks-IPv6.csv":
+        headers = [
+            'network', 
+            'geoname_id', 
+            'registered_country_geoname_id', 
+            'represented_country_geoname_id', 
+            'is_anonymous_proxy', 
+            'is_satellite_provider',
+            'postal_code',
+            'latitude', 
+            'longitude',
+            'accuracy_radius',
+            'is_anycast'
+        ]
+    else:
+        headers = [] 
 
     # Convert all headers into STRING schema
     schema = [bigquery.SchemaField(column, "STRING") for column in headers]
@@ -192,12 +242,15 @@ def load_csv_to_bq(file):
         )
 
         load_job = client.load_table_from_uri(uri, table_id, job_config=job_config)
-        result =  load_job.result()
-        if load_job.errors:
-            print(f"BigQuery load job failed for table {table_id}")
-            for error in load_job.errors:
-                print(f"Error: {error['message']}")
-            return False
+        """
+        Running Asynchronously for now. 
+        """
+        # result =  load_job.result()
+        # if load_job.errors:
+        #     print(f"BigQuery load job failed for table {table_id}")
+        #     for error in load_job.errors:
+        #         print(f"Error: {error['message']}")
+        #     return False
         return True
     except Exception as e:
         print(f"Unexpected Exception while loading {file['filename']} into {table_id}: {e}")
@@ -289,14 +342,32 @@ def send_geo_data():
 
 @app.route("/update", methods=["POST"])
 @require_auth
-def main():
+def _fetch_zip():
     if not fetch_zip():
         return jsonify({"error": "Failed to fetch ZIP"}), 500
+    # Checks to see if there is already a file there
+    zip_date = get_zip_date()
+    latest_gcs_date = get_latest_gcs_date()
+    if zip_date == latest_gcs_date:
+        return jsonify({"success": "Data Exists"}), 202
+    else:
+        response = requests.post(f"{CLOUD_RUN_PROCESS_DATA_URL}/extract-zip", headers={f"Authorization": f"Bearer {API_KEY}"})
+        return jsonify(response.json()), response.status_code
+    
+@app.route("/extract-zip", methods=["POST"])
+@require_auth
+def _extract_zip():
     zip_extracted = extract_zip()
     if not zip_extracted:
         return jsonify({"error": "Failed to extract ZIP"}), 500
     elif zip_extracted == "FOLDER_EXISTS":
         return jsonify({"success": "Data Exists"}), 202
+    response = requests.post(f"{CLOUD_RUN_PROCESS_DATA_URL}/load-bigquery", headers={f"Authorization": f"Bearer {API_KEY}"})
+    return jsonify(response.json()), response.status_code
+
+@app.route("/load-bigquery", methods=["POST"])
+@require_auth
+def _load_bigquery():
     # Files that need to become bigquery tables
     files = [
         {"filename": "GeoLite2-City-Blocks-IPv4.csv", "tablename": "ipv4"}, 
